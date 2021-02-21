@@ -4,7 +4,7 @@
 from setuptools import setup
 
 if __name__ == '__main__':
-    with open('README.rst') as file:
+    with open('README.md') as file:
         long_description = file.read()
     setup(
         name='tardataset',
@@ -19,6 +19,7 @@ if __name__ == '__main__':
         version='0.1',
         keywords=('dataset', 'file format'),
         description='A dataset format based on BSON and tar file.',
+        long_description_content_type='text/markdown',
         long_description=long_description,
         license='Free',
         author='xi',

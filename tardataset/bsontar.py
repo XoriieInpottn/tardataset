@@ -28,7 +28,7 @@ def decode_ndarray(data: bytes) -> np.ndarray:
     shape_start = dtype_end + 1
     shape_end = data.find(b')', shape_start)
     dtype = data[:dtype_end]
-    shape = tuple(int(size) for size in data[shape_start:shape_end].split(b','))
+    shape = tuple(int(size) for size in data[shape_start:shape_end].split(b',') if size)
     buffer = data[shape_end + 1:]
     a = np.ndarray(dtype=dtype, shape=shape, buffer=buffer)
     return np.array(a)

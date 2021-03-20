@@ -16,7 +16,7 @@ if __name__ == '__main__':
                 'bsontar = tardataset.entries:entry_bsontar'
             ]
         },
-        version='0.1.1',
+        version='0.1.2',
         keywords=('dataset', 'file format'),
         description='A dataset format based on BSON and tar file.',
         long_description_content_type='text/markdown',
@@ -34,6 +34,7 @@ if __name__ == '__main__':
         include_package_data=True,
         zip_safe=True,
         install_requires=[
+            'tqdm',
             'numpy',
             'pymongo'
         ]

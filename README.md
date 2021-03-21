@@ -75,6 +75,14 @@ with BSONTar(tar_path, 'r') as tar:
 
 ```
 
+### View the Dataset in Console
+
+```bash
+bsontar /path/to/the/file.tar
+```
+
+
+
 ### Integrate with Pytorch
 
 ```python

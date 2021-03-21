@@ -82,7 +82,7 @@ class BufferedIndex(object):
         self._start = UINT64.unpack(self._f.read(UINT64.size))[0]
         self._count = UINT64.unpack(self._f.read(UINT64.size))[0]
 
-        self.block_dict = {}
+        self._block_dict = {}
 
     def close(self):
         if hasattr(self, '_f'):
@@ -96,23 +96,25 @@ class BufferedIndex(object):
         return self._count
 
     def __getitem__(self, i):
+        assert i < self._count
         block_index = i // self._block_size
         offset = i % self._block_size
-        if block_index not in self.block_dict:
+        if block_index not in self._block_dict:
             self._load_block(block_index)
-        return self.block_dict[block_index][offset]
+        return self._block_dict[block_index][offset]
 
     def __setitem__(self, i, value):
+        assert i < self._count
         block_index = i // self._block_size
         offset = i % self._block_size
-        if block_index not in self.block_dict:
+        if block_index not in self._block_dict:
             self._load_block(block_index)
-        self.block_dict[block_index][offset] = value
+        self._block_dict[block_index][offset] = value
 
     def _load_block(self, block_index):
         block_start = block_index * self._block_size
         self._f.seek(self._start + UINT64.size * block_start, io.SEEK_SET)
-        self.block_dict[block_index] = [
+        self._block_dict[block_index] = [
             UINT64.unpack(self._f.read(UINT64.size))[0]
             for _ in range(block_start, min(block_start + self._block_size, self._count))
         ]
@@ -155,7 +157,7 @@ class TarReader(object):
                     self._index.append(info)
 
     def _load_full_index(self):
-        index = []
+        full_index = []
         with io.open(self._path, 'rb') as f:
             f.seek(-(8 + UINT64.size * 2 + 16), io.SEEK_END)
             if f.read(8) != b'TARINDEX':
@@ -169,9 +171,10 @@ class TarReader(object):
                 start_bin = f.read(UINT64.size)
                 checksum.update(start_bin)
                 start = UINT64.unpack(start_bin)[0]
-                index.append(start)
+                full_index.append(start)
             if checksum.digest() != checksum_bin:
                 raise RuntimeError('Corrupted tar index.')
+        return full_index
 
     def __del__(self):
         self.close()

@@ -54,15 +54,16 @@ CODEC_OPTIONS = CodecOptions(type_registry=TypeRegistry([NumpyCodec()]))
 
 class BSONTar(object):
 
-    def __init__(self, path: str, mode: str):
+    def __init__(self, path: str, mode: str, check_index=False):
         self._path = path
         self._mode = mode
+        self._check_index = check_index
 
         self._init()
 
     def _init(self):
         if self._mode == 'r':
-            self._impl = self._impl_reader = TarReader(self._path)
+            self._impl = self._impl_reader = TarReader(self._path, check_index=self._check_index)
         elif self._mode == 'w':
             self._impl = self._impl_writer = TarWriter(self._path)
         else:

@@ -16,12 +16,12 @@ if __name__ == '__main__':
                 'bsontar = tardataset.entries:entry_bsontar'
             ]
         },
-        version='0.1.3',
+        version='0.1.4',
         keywords=('dataset', 'file format'),
         description='A dataset format based on BSON and tar file.',
         long_description_content_type='text/markdown',
         long_description=long_description,
-        license='Free',
+        license='BSD-3-Clause License',
         author='xi',
         author_email='gylv@mail.ustc.edu.cn',
         url='https://github.com/XoriieInpottn/tardataset',

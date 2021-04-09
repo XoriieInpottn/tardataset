@@ -12,8 +12,10 @@ import sys
 import tarfile
 import time
 
+import numpy as np
 from tqdm import tqdm
 
+INDEX_HEAD = b'TARINDEX'
 UINT64 = struct.Struct('<Q')
 
 
@@ -44,17 +46,26 @@ class TarWriter(object):
 
     def _write_index(self):
         with io.open(self._path, 'ab') as f:
+            # get index head info
             index_start = f.tell()
             index_count = len(self._index)
-            checksum = hashlib.md5()
+
+            # write index body
             for pos in self._index:
-                pos_bin = UINT64.pack(pos)
-                checksum.update(pos_bin)
-                f.write(pos_bin)
-            f.write(b'TARINDEX')
-            f.write(UINT64.pack(index_start))
-            f.write(UINT64.pack(index_count))
-            f.write(checksum.digest())
+                f.write(UINT64.pack(pos))
+
+            # write index head info
+            checksum = hashlib.md5()
+            checksum.update(INDEX_HEAD)
+            start_bin = UINT64.pack(index_start)
+            count_bin = UINT64.pack(index_count)
+            checksum.update(start_bin)
+            checksum.update(count_bin)
+            checksum_bin = checksum.digest()
+            f.write(INDEX_HEAD)
+            f.write(start_bin)
+            f.write(count_bin)
+            f.write(checksum_bin)
 
     def __del__(self):
         self.close()
@@ -69,112 +80,58 @@ class TarWriter(object):
         return len(self._index)
 
 
-class BufferedIndex(object):
-
-    def __init__(self, path, block_size=100):
-        self._path = path
-        self._block_size = block_size
-
-        self._f = io.open(path, 'rb')
-        self._f.seek(-(8 + UINT64.size * 2 + 16), io.SEEK_END)
-        if self._f.read(8) != b'TARINDEX':
-            raise RuntimeError('No tar index found.')
-        self._start = UINT64.unpack(self._f.read(UINT64.size))[0]
-        self._count = UINT64.unpack(self._f.read(UINT64.size))[0]
-
-        self._block_dict = {}
-
-    def close(self):
-        if hasattr(self, '_f'):
-            self._f.close()
-            delattr(self, '_f')
-
-    def __del__(self):
-        self.close()
-
-    def __len__(self):
-        return self._count
-
-    def __getitem__(self, i):
-        assert i < self._count
-        block_index = i // self._block_size
-        offset = i % self._block_size
-        if block_index not in self._block_dict:
-            self._load_block(block_index)
-        return self._block_dict[block_index][offset]
-
-    def __setitem__(self, i, value):
-        assert i < self._count
-        block_index = i // self._block_size
-        offset = i % self._block_size
-        if block_index not in self._block_dict:
-            self._load_block(block_index)
-        self._block_dict[block_index][offset] = value
-
-    def _load_block(self, block_index):
-        block_start = block_index * self._block_size
-        self._f.seek(self._start + UINT64.size * block_start, io.SEEK_SET)
-        self._block_dict[block_index] = [
-            UINT64.unpack(self._f.read(UINT64.size))[0]
-            for _ in range(block_start, min(block_start + self._block_size, self._count))
-        ]
-
-
 class TarReader(object):
 
-    def __init__(self, path: str, check_index=False):
+    def __init__(self, path: str, block_size=1024):
         self._path = path
-        self._check_index = check_index
+        self._block_size = block_size
         self._index = None
+        self._info_dict = {}
 
+        self._fp = io.open(path, 'rb')
+        self._tar = tarfile.open(fileobj=self._fp, mode='r')
         self._read_index()
-        self._tar = None
 
     def close(self):
         if hasattr(self, '_tar'):
             if self._tar is not None:
                 self._tar.close()
             delattr(self, '_tar')
-
-    def read(self, i):
-        if self._tar is None:
-            self._tar = tarfile.open(self._path, 'r')
-        info = self._index[i]
-        if isinstance(info, int):
-            self._tar.fileobj.seek(info, io.SEEK_SET)
-            info = tarfile.TarInfo.fromtarfile(self._tar)
-            self._index[i] = info
-        return self._tar.extractfile(info).read()
+        if hasattr(self, '_fp'):
+            if self._fp is not None:
+                self._fp.close()
+            delattr(self, '_fp')
 
     def _read_index(self):
-        try:
-            self._index = self._load_full_index() if self._check_index else BufferedIndex(self._path)
-        except RuntimeError as e:
-            print(str(e), 'It will take some time to build from scratch.', file=sys.stderr)
+        head_size = len(INDEX_HEAD)
+        self._fp.seek(-(16 + UINT64.size * 2 + head_size), io.SEEK_END)
+        head = self._fp.read(head_size)
+        if head == INDEX_HEAD:
+            self._index_start = UINT64.unpack(self._fp.read(UINT64.size))[0]
+            self._index_count = UINT64.unpack(self._fp.read(UINT64.size))[0]
+            self._index = np.full((self._index_count,), -1, dtype='<i8')
+        else:
+            print('No index found. It will take some time to build from scratch.', file=sys.stderr)
+            self._index_start = None
+            self._index_count = None
             self._index = []
             with tarfile.open(self._path, 'r') as tar:
                 for info in tqdm(tar, leave=False):
                     self._index.append(info)
 
-    def _load_full_index(self):
-        full_index = []
-        with io.open(self._path, 'rb') as f:
-            f.seek(-(8 + UINT64.size * 2 + 16), io.SEEK_END)
-            if f.read(8) != b'TARINDEX':
-                raise RuntimeError('No tar index found.')
-            index_start = UINT64.unpack(f.read(UINT64.size))[0]
-            index_count = UINT64.unpack(f.read(UINT64.size))[0]
-            checksum_bin = f.read(16)
-            f.seek(index_start, io.SEEK_SET)
-            checksum = hashlib.md5()
-            for _ in range(index_count):
-                start_bin = f.read(UINT64.size)
-                checksum.update(start_bin)
-                start = UINT64.unpack(start_bin)[0]
-                full_index.append(start)
-            if checksum.digest() != checksum_bin:
-                raise RuntimeError('Corrupted tar index.')
-        return full_index
+    def read(self, i):
+        if i not in self._info_dict:
+            pos = self._index[i]
+            if pos < 0:
+                i_left = (i // self._block_size) * self._block_size
+                i_right = min(i_left + self._block_size, self._index_count)
+                self._fp.seek(self._index_start + UINT64.size * i_left, io.SEEK_SET)
+                for j in range(i_left, i_right):
+                    self._index[j] = UINT64.unpack(self._fp.read(UINT64.size))[0]
+                pos = self._index[i]
+            self._fp.seek(pos, io.SEEK_SET)
+            self._info_dict[i] = tarfile.TarInfo.fromtarfile(self._tar)
+        return self._tar.extractfile(self._info_dict[i]).read()
 
     def __del__(self):
         self.close()

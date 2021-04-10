@@ -17,23 +17,27 @@ def entry_bsontar():
     parser.add_argument('input', nargs='?')
     args = parser.parse_args()
 
-    print(f'File: {args.input}')
+    print(args.input)
     with BSONTar(args.input, 'r') as f:
         count = len(f)
-        print(f'Count: {count}')
-        if count > 0:
-            doc = f[0]
-            print('{')
-            for name, value in doc.items():
-                if isinstance(value, str):
-                    value = f'"{value}"'
-                elif isinstance(value, np.ndarray):
-                    value = f'ndarray(dtype={value.dtype}, shape={value.shape})'
-                elif isinstance(value, bytes):
-                    size = _format_size(len(value))
-                    value = f'binary(size={size})'
-                print(f'    "{name}": {value}')
-            print('}')
+        print(f'{count} samples')
+        print()
+
+        meta_doc = f.meta_doc
+        if meta_doc:
+            for name, value in f.meta_doc.items():
+                print(f'{name}: {str(value)}')
+            print()
+
+        for i in range(min(2, count)):
+            print(f'Sample {i}')
+            _print_doc(f[i])
+
+        if count > 2:
+            i = count - 1
+            print('...')
+            print(f'Sample {i}')
+            _print_doc(f[i])
 
     return 0
 
@@ -49,6 +53,18 @@ def _format_size(size):
     if n == 0:
         return f'{size}{_POWER_LABELS[n]}'
     return f'{size:.01f}{_POWER_LABELS[n]}'
+
+
+def _print_doc(doc):
+    for name, value in doc.items():
+        if isinstance(value, str):
+            value = f'"{value}"'
+        elif isinstance(value, np.ndarray):
+            value = f'ndarray(dtype={value.dtype}, shape={value.shape})'
+        elif isinstance(value, bytes):
+            size = _format_size(len(value))
+            value = f'binary(size={size})'
+        print(f'    "{name}": {value}')
 
 
 if __name__ == '__main__':

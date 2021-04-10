@@ -16,7 +16,7 @@ if __name__ == '__main__':
                 'bsontar = tardataset.entries:entry_bsontar'
             ]
         },
-        version='0.1.5',
+        version='0.1.6',
         keywords=('dataset', 'file format'),
         description='A dataset format based on BSON and tar file.',
         long_description_content_type='text/markdown',

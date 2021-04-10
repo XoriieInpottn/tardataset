@@ -67,9 +67,6 @@ class TarWriter(object):
             f.write(count_bin)
             f.write(checksum_bin)
 
-    def __del__(self):
-        self.close()
-
     def __enter__(self):
         return self
 

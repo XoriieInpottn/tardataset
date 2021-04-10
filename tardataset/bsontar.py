@@ -71,7 +71,8 @@ class BSONTarWriter(object):
         return self._meta_doc
 
     @meta_doc.setter
-    def meta_doc(self, doc):
+    def meta_doc(self, doc: dict):
+        assert isinstance(doc, dict)
         self._meta_doc = doc
 
     def write(self, doc):

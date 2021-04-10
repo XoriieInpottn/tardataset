@@ -52,32 +52,68 @@ class NumpyCodec(TypeCodec):
 CODEC_OPTIONS = CodecOptions(type_registry=TypeRegistry([NumpyCodec()]))
 
 
-class BSONTar(object):
+class BSONTarWriter(object):
 
-    def __init__(self, path: str, mode: str):
+    def __init__(self, path: str):
         self._path = path
-        self._mode = mode
-
-        self._init()
-
-    def _init(self):
-        if self._mode == 'r':
-            self._impl = self._impl_reader = TarReader(self._path)
-        elif self._mode == 'w':
-            self._impl = self._impl_writer = TarWriter(self._path)
-        else:
-            raise RuntimeError()
+        self._impl = TarWriter(path)
+        self._meta_doc = {}
 
     def close(self):
+        if self._meta_doc is not None:
+            data = BSON.encode(self._meta_doc, codec_options=CODEC_OPTIONS)
+            self._impl.write('meta.bson', data)
+            self._meta_doc = None
         self._impl.close()
+
+    @property
+    def meta_doc(self):
+        return self._meta_doc
+
+    @meta_doc.setter
+    def meta_doc(self, doc):
+        self._meta_doc = doc
 
     def write(self, doc):
         name = f'{len(self._impl)}.bson'
         data = BSON.encode(doc, codec_options=CODEC_OPTIONS)
-        self._impl_writer.write(name, data)
+        self._impl.write(name, data)
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.close()
+
+    def __len__(self):
+        return self._impl.__len__()
+
+
+class BSONTarReader(object):
+
+    def __init__(self, path: str, block_size=1024):
+        self._path = path
+        self._impl = TarReader(path, block_size)
+        self._count = len(self._impl)
+
+        name, data = self._impl.read(self._count - 1)
+        if name == 'meta.bson':
+            self._count -= 1
+            doc = BSON(data).decode(codec_options=CODEC_OPTIONS)
+            # noinspection PyUnresolvedReferences
+            self._meta_doc = {k: v for k, v in doc.items()}
+        else:
+            self._meta_doc = {}
+
+    def close(self):
+        self._impl.close()
+
+    @property
+    def meta_doc(self):
+        return self._meta_doc
 
     def read(self, i: int) -> dict:
-        data = self._impl_reader.read(i)
+        name, data = self._impl.read(i)
         # noinspection PyTypeChecker
         return BSON(data).decode(codec_options=CODEC_OPTIONS)
 
@@ -85,10 +121,19 @@ class BSONTar(object):
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        self._impl.__exit__(exc_type, exc_val, exc_tb)
+        self.close()
 
     def __getitem__(self, i: int):
         return self.read(i)
 
     def __len__(self):
-        return self._impl.__len__()
+        return self._count
+
+
+def BSONTar(path: str, mode: str):
+    if mode == 'r':
+        return BSONTarReader(path)
+    elif mode == 'w':
+        return BSONTarWriter(path)
+    else:
+        raise RuntimeError('"mode" should be one of {"r", "w"}.')

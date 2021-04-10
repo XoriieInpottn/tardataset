@@ -29,6 +29,7 @@ class TarWriter(object):
         self._info = tarfile.TarInfo()
         self._info.uname = 'user'
         self._info.gname = 'group'
+        self._info.mtime = int(time.time())
 
     def close(self):
         if hasattr(self, '_tar'):
@@ -41,7 +42,6 @@ class TarWriter(object):
         self._index.append(start)
         self._info.name = name
         self._info.size = len(data)
-        self._info.mtime = time.time()
         self._tar.addfile(self._info, io.BytesIO(data))
 
     def _write_index(self):
@@ -131,7 +131,8 @@ class TarReader(object):
                 pos = self._index[i]
             self._fp.seek(pos, io.SEEK_SET)
             self._info_dict[i] = tarfile.TarInfo.fromtarfile(self._tar)
-        return self._tar.extractfile(self._info_dict[i]).read()
+        info = self._info_dict[i]
+        return info.name, self._tar.extractfile(info).read()
 
     def __del__(self):
         self.close()
